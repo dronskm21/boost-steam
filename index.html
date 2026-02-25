@@ -104,6 +104,23 @@ body::before {
 .balance-bar .bal-icon { font-size: 16px; }
 .balance-bar .bal-amount { color: var(--green); font-weight: 500; }
 
+.lang-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+}
+.lang-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
 /* ── Navigation tabs ── */
 .nav {
   display: flex;
@@ -373,6 +390,7 @@ body::before {
 <div class="header">
   <div class="logo">Boost Steam</div>
   <div class="logo-sub">Promotion Services</div>
+  <button class="lang-toggle" id="langToggle" onclick="toggleLang()">🌐 EN</button>
   <div class="balance-bar" id="balanceBar" style="display:none">
     <span class="bal-icon">💰</span>
     <span class="bal-amount" id="balAmount">$0.00</span>
@@ -455,7 +473,7 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// Подстроим тему
+// Theme
 if (tg.colorScheme === 'light') {
   document.documentElement.style.setProperty('--bg', '#f5f5f5');
   document.documentElement.style.setProperty('--bg2', '#ffffff');
@@ -468,21 +486,140 @@ if (tg.colorScheme === 'light') {
   document.documentElement.style.setProperty('--border', '#ddd');
 }
 
-// ── Данные из конфига ──
+// ══════════════════════════════════════════════════════
+//  LOCALIZATION
+// ══════════════════════════════════════════════════════
+
+const I18N = {
+  ru: {
+    tab_services: '🛒 Услуги', tab_dota: '🗡️ Дота 2', tab_accounts: '🎮 Аккаунты',
+    steam_url: 'Ссылка Steam', steam_url_ph: 'https://steamcommunity.com/...',
+    amount: 'Количество', summary_service: 'Услуга', summary_amount: 'Количество',
+    summary_total: 'Итого', submit: 'Оформить заказ', order_sent: '✅ Заказ отправлен!',
+    per_unit: 'шт',
+    coming_dota_title: 'Collectors Dota 2 Сеты', coming_dota_sub: 'Раздел скоро будет добавлен',
+    coming_acc_title: 'Аккаунты с играми', coming_acc_sub: 'Раздел скоро будет добавлен',
+  },
+  en: {
+    tab_services: '🛒 Services', tab_dota: '🗡️ Dota 2', tab_accounts: '🎮 Accounts',
+    steam_url: 'Steam URL', steam_url_ph: 'https://steamcommunity.com/...',
+    amount: 'Amount', summary_service: 'Service', summary_amount: 'Amount',
+    summary_total: 'Total', submit: 'Place Order', order_sent: '✅ Order submitted!',
+    per_unit: 'ea',
+    coming_dota_title: 'Collectors Dota 2 Sets', coming_dota_sub: 'Coming soon',
+    coming_acc_title: 'Game Accounts', coming_acc_sub: 'Coming soon',
+  }
+};
+
+const SVC_I18N = {
+  ru: {
+    like:           {name:'Лайки',               desc:'Скриншоты, арты, мастерская'},
+    dislike:        {name:'Дизлайки',             desc:'Скриншоты, арты, мастерская'},
+    comment:        {name:'Комментарии',          desc:'Профили Steam'},
+    favorite:       {name:'Избранное',            desc:'Предметы мастерской'},
+    workshop_sub:   {name:'Подписки (предмет)',    desc:'Предметы и гайды'},
+    workshop:       {name:'Подписки (мастерская)', desc:'Мастерская пользователя'},
+    group:          {name:'Участники группы',      desc:'Steam группы'},
+    friend:         {name:'Заявки в друзья',       desc:'Профили Steam'},
+    wishlist:       {name:'Вишлист',              desc:'Добавление игры в вишлист'},
+    view:           {name:'Просмотры',            desc:'Скриншоты, арты, мастерская'},
+    curator:        {name:'Подписки куратора',    desc:'Steam кураторы'},
+    review_like:    {name:'Лайки на обзоры',      desc:'Обзоры Steam'},
+    review_comment: {name:'Комменты на обзоры',   desc:'Обзоры Steam'},
+  },
+  en: {
+    like:           {name:'Likes',                desc:'Screenshots, artworks, workshop'},
+    dislike:        {name:'Dislikes',             desc:'Screenshots, artworks, workshop'},
+    comment:        {name:'Comments',             desc:'Steam profiles'},
+    favorite:       {name:'Favorites',            desc:'Workshop items'},
+    workshop_sub:   {name:'Subscriptions (item)',  desc:'Items and guides'},
+    workshop:       {name:'Subscriptions (workshop)', desc:'User workshop'},
+    group:          {name:'Group Members',        desc:'Steam groups'},
+    friend:         {name:'Friend Requests',      desc:'Steam profiles'},
+    wishlist:       {name:'Wishlist',             desc:'Add game to wishlist'},
+    view:           {name:'Views',                desc:'Screenshots, artworks, workshop'},
+    curator:        {name:'Curator Follows',      desc:'Steam curators'},
+    review_like:    {name:'Review Likes',         desc:'Steam reviews'},
+    review_comment: {name:'Review Comments',      desc:'Steam reviews'},
+  }
+};
+
+// Detect language: URL param > Telegram user language
+let currentLang = 'en';
+const urlParams = new URLSearchParams(window.location.search);
+const urlLang = urlParams.get('lang');
+if (urlLang === 'ru' || urlLang === 'en') {
+  currentLang = urlLang;
+} else if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+  const tgLang = (tg.initDataUnsafe.user.language_code || '').substring(0, 2);
+  currentLang = (tgLang === 'ru' || tgLang === 'uk' || tgLang === 'be') ? 'ru' : 'en';
+}
+
+function tr(key) {
+  return (I18N[currentLang] || I18N.en)[key] || key;
+}
+function svcName(key) {
+  return ((SVC_I18N[currentLang] || SVC_I18N.en)[key] || {}).name || key;
+}
+function svcDesc(key) {
+  return ((SVC_I18N[currentLang] || SVC_I18N.en)[key] || {}).desc || '';
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'ru' ? 'en' : 'ru';
+  document.getElementById('langToggle').textContent = '🌐 ' + currentLang.toUpperCase();
+  applyLang();
+}
+
+function applyLang() {
+  // Tabs
+  const tabs = document.querySelectorAll('.nav-tab');
+  tabs[0].textContent = tr('tab_services');
+  tabs[1].textContent = tr('tab_dota');
+  tabs[2].textContent = tr('tab_accounts');
+
+  // Coming soon
+  const dotaCard = document.querySelector('#tab-dota .coming-card');
+  if (dotaCard) {
+    dotaCard.querySelector('.title').textContent = tr('coming_dota_title');
+    dotaCard.querySelector('.sub').textContent = tr('coming_dota_sub');
+  }
+  const accCard = document.querySelector('#tab-accounts .coming-card');
+  if (accCard) {
+    accCard.querySelector('.title').textContent = tr('coming_acc_title');
+    accCard.querySelector('.sub').textContent = tr('coming_acc_sub');
+  }
+
+  // Order panel labels
+  const formLabels = document.querySelectorAll('#orderPanel .form-label');
+  if (formLabels[0]) formLabels[0].textContent = tr('steam_url');
+  if (formLabels[1]) formLabels[1].textContent = tr('amount');
+  document.getElementById('targetUrl').placeholder = tr('steam_url_ph');
+
+  const summaryLabels = document.querySelectorAll('.summary-row .label');
+  if (summaryLabels[0]) summaryLabels[0].textContent = tr('summary_service');
+  if (summaryLabels[1]) summaryLabels[1].textContent = tr('summary_amount');
+  if (summaryLabels[2]) summaryLabels[2].textContent = tr('summary_total');
+  document.getElementById('submitBtn').textContent = tr('submit');
+
+  renderServices();
+}
+
+// ── Services data ──
 const SERVICES = {
-  like:           {icon:'👍', name:'Лайки',               desc:'Скриншоты, арты, мастерская', price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
-  dislike:        {icon:'👎', name:'Дизлайки',             desc:'Скриншоты, арты, мастерская', price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
-  comment:        {icon:'💬', name:'Комментарии',          desc:'Профили Steam',               price:0.014, min:10, max:1125, presets:[10,50,100,500,1125]},
-  favorite:       {icon:'⭐', name:'Избранное',            desc:'Предметы мастерской',          price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
-  workshop_sub:   {icon:'📥', name:'Подписки (предмет)',    desc:'Предметы и гайды',             price:0.013, min:10, max:1125, presets:[10,50,100,500,1125]},
-  workshop:       {icon:'🔧', name:'Подписки (мастерская)', desc:'Мастерская пользователя',     price:0.013, min:10, max:1125, presets:[10,50,100,500,1125]},
-  group:          {icon:'👥', name:'Участники группы',      desc:'Steam группы',                 price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
-  friend:         {icon:'🤝', name:'Заявки в друзья',       desc:'Профили Steam',                price:0.021, min:10, max:200,  presets:[10,50,100,200]},
-  wishlist:       {icon:'💝', name:'Вишлист',              desc:'Добавление игры в вишлист',    price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
-  view:           {icon:'👁', name:'Просмотры',            desc:'Скриншоты, арты, мастерская',  price:0.005, min:50, max:1125, presets:[50,100,200,500,1125]},
-  curator:        {icon:'📢', name:'Подписки куратора',    desc:'Steam кураторы',               price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
-  review_like:    {icon:'📝', name:'Лайки на обзоры',      desc:'Обзоры Steam',                 price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
-  review_comment: {icon:'💭', name:'Комменты на обзоры',   desc:'Обзоры Steam',                 price:0.014, min:10, max:1125, presets:[10,50,100,500,1125]},
+  like:           {icon:'👍', price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
+  dislike:        {icon:'👎', price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
+  comment:        {icon:'💬', price:0.014, min:10, max:1125, presets:[10,50,100,500,1125]},
+  favorite:       {icon:'⭐', price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
+  workshop_sub:   {icon:'📥', price:0.013, min:10, max:1125, presets:[10,50,100,500,1125]},
+  workshop:       {icon:'🔧', price:0.013, min:10, max:1125, presets:[10,50,100,500,1125]},
+  group:          {icon:'👥', price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
+  friend:         {icon:'🤝', price:0.021, min:10, max:200,  presets:[10,50,100,200]},
+  wishlist:       {icon:'💝', price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
+  view:           {icon:'👁', price:0.005, min:50, max:1125, presets:[50,100,200,500,1125]},
+  curator:        {icon:'📢', price:0.01,  min:10, max:1125, presets:[10,50,100,500,1125]},
+  review_like:    {icon:'📝', price:0.008, min:10, max:1125, presets:[10,50,100,500,1125]},
+  review_comment: {icon:'💭', price:0.014, min:10, max:1125, presets:[10,50,100,500,1125]},
 };
 
 let currentService = null;
@@ -498,9 +635,9 @@ function renderServices() {
     card.onclick = () => openOrder(key);
     card.innerHTML = `
       <div class="svc-icon">${svc.icon}</div>
-      <div class="svc-name">${svc.name}</div>
-      <div class="svc-price">$${svc.price}/шт</div>
-      <div class="svc-desc">${svc.desc}</div>
+      <div class="svc-name">${svcName(key)}</div>
+      <div class="svc-price">$${svc.price}/${tr('per_unit')}</div>
+      <div class="svc-desc">${svcDesc(key)}</div>
     `;
     grid.appendChild(card);
   }
@@ -527,7 +664,7 @@ function openOrder(key) {
   const panel = document.getElementById('orderPanel');
   panel.classList.add('active');
   
-  document.getElementById('orderTitle').textContent = svc.icon + ' ' + svc.name;
+  document.getElementById('orderTitle').textContent = svc.icon + ' ' + svcName(key);
   document.getElementById('targetUrl').value = '';
   document.getElementById('amountInput').value = '';
   document.getElementById('amountInput').min = svc.min;
@@ -536,7 +673,6 @@ function openOrder(key) {
   document.getElementById('orderSummary').style.display = 'none';
   document.getElementById('submitBtn').disabled = true;
   
-  // Presets
   const presetsEl = document.getElementById('presets');
   presetsEl.innerHTML = '';
   svc.presets.forEach(p => {
@@ -565,7 +701,7 @@ function closeOrder() {
   currentService = null;
 }
 
-// ── Summary update ──
+// ── Summary ──
 document.getElementById('amountInput').addEventListener('input', updateSummary);
 document.getElementById('targetUrl').addEventListener('input', updateSummary);
 
@@ -578,7 +714,7 @@ function updateSummary() {
   
   const valid = amount >= svc.min && amount <= svc.max && url.length > 10;
   
-  document.getElementById('sumService').textContent = svc.name;
+  document.getElementById('sumService').textContent = svcName(currentService);
   document.getElementById('sumAmount').textContent = amount;
   document.getElementById('sumTotal').textContent = '$' + total;
   document.getElementById('orderSummary').style.display = valid ? '' : 'none';
@@ -593,21 +729,15 @@ function submitOrder() {
   const url = document.getElementById('targetUrl').value.trim();
   const total = (amount * svc.price).toFixed(2);
   
-  // Отправляем данные в бот
-  const data = JSON.stringify({
+  tg.sendData(JSON.stringify({
     action: 'order',
     service: currentService,
     amount: amount,
     target_url: url,
     total: total,
-  });
-  
-  tg.sendData(data);
-  showToast('✅ Заказ отправлен!');
-  
-  setTimeout(() => {
-    closeOrder();
-  }, 1000);
+  }));
+  showToast(tr('order_sent'));
+  setTimeout(() => closeOrder(), 1000);
 }
 
 // ── Toast ──
@@ -619,9 +749,9 @@ function showToast(msg, isError) {
 }
 
 // ── Init ──
-renderServices();
+document.getElementById('langToggle').textContent = '🌐 ' + currentLang.toUpperCase();
+applyLang();
 
-// Получаем баланс из initData
 if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
   document.getElementById('balanceBar').style.display = 'inline-flex';
 }
